@@ -44,10 +44,46 @@ func main() {
 	}
 }
 
+// loggingMiddleware 是一个记录所有请求详细信息的中间件
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// 在请求处理前记录
+		log.Printf(">>> INCOMING REQUEST: %s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
+		log.Printf("    Host: %s, User-Agent: %s", r.Host, r.UserAgent())
+
+		// 创建一个包装的ResponseWriter来捕获状态码
+		wrappedWriter := &responseWriterWrapper{ResponseWriter: w}
+
+		// 调用下一个处理器（通常是路由匹配）
+		next.ServeHTTP(wrappedWriter, r)
+
+		// 请求处理后记录
+		duration := time.Since(start)
+		log.Printf("<<< RESPONSE: %d %s (%v) for %s %s",
+			wrappedWriter.status,
+			http.StatusText(wrappedWriter.status),
+			duration,
+			r.Method,
+			r.URL.Path,
+		)
+		log.Println("---") // 添加分隔线使日志更清晰
+	})
+}
+
+// responseWriterWrapper 用于捕获响应状态码
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	status int
+}
+
 // serveHTTP 处理HTTP流量（示例：可以转发到其他后端）
 func serveHTTP(l net.Listener) {
 	// 1. 创建强大的路由器
 	router := mux.NewRouter()
+
+	router.Use(loggingMiddleware)
 
 	// 2. 创建反向代理到其他WebServer（例如Nginx、静态文件服务）
 	targetURL, _ := url.Parse("http://59.110.10.92:8080") // 你的其他WebServer
