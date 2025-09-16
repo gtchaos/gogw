@@ -178,7 +178,7 @@ func (c *Client) msgRequestLoop() error {
 		msgPackResponse, err := schema.ReadMsg(response.Body)
 		if err != nil {
 			logger.Error(err)
-			continue
+			return err
 		}
 
 		response.Body.Close()
