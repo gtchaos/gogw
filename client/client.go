@@ -82,7 +82,11 @@ func (c *Client) Start() {
 			}
 		}
 
-		c.msgRequestLoop()
+		if err := c.msgRequestLoop(); err != nil {
+			logger.Error(err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
 	}
 }
 
@@ -154,7 +158,7 @@ func (c *Client) register() error {
 	return err
 }
 
-func (c *Client) msgRequestLoop() {
+func (c *Client) msgRequestLoop() error {
 	url := fmt.Sprintf("http://%v/msg?clientid=%v", c.ServerAddr, c.ClientId)
 	msgPack := &schema.MsgPack{
 		MsgType: schema.MSG_TYPE_MSG_COMMON_REQUEST,
@@ -168,7 +172,7 @@ func (c *Client) msgRequestLoop() {
 		response, err := http.Post(url, "", bytes.NewReader(data))
 		if err != nil {
 			logger.Error(err)
-			return
+			return err
 		}
 
 		msgPackResponse, err := schema.ReadMsg(response.Body)
@@ -183,6 +187,7 @@ func (c *Client) msgRequestLoop() {
 			//only reverse connection need this
 			if c.Direction == schema.DIRECTION_REVERSE {
 				c.openReverseConn(msg.ConnId)
+				logger.Info("New Reverse Connection\nClientId: %v\nSourceAddr: %v\nRemoteAddr: %v\n")
 			}
 		}
 	}
@@ -315,7 +320,7 @@ func (c *Client) openConn(connId string, conn net.Conn) error {
 	return nil
 }
 
-//only used in HTTP1.0
+// only used in HTTP1.0
 func (c *Client) closeConn(connId string) {
 	url := fmt.Sprintf("http://%v/msg?clientid=%v", c.ServerAddr, c.ClientId)
 	readerMsgPack := &schema.MsgPack{
