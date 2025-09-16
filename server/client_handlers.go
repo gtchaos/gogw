@@ -1,7 +1,6 @@
 package server
 
 import (
-	"io"
 	"net"
 	"net/http"
 
@@ -60,19 +59,10 @@ func (c *Client) openConnHandler(msg *schema.OpenConnRequest, w http.ResponseWri
 			conn, _ := conni.(*common.Conn)
 
 			if c.HttpVersion == schema.HTTP_VERSION_1_1 {
+				logger.Info("[ROLE_READER] start to copy from target server")
 				common.Copy(conn.Conn, req.Body, false, c.Compress, c.UploadSpeedMonitor)
 				c.deleteConn(msg.ConnId)
 
-			} else if c.HttpVersion == schema.HTTP_VERSION_1_0 {
-				//n, err := io.Copy(conn.Conn, req.Body)
-				_, err := common.CopyAll(conn.Conn, req.Body, false, c.Compress, c.UploadSpeedMonitor)
-				req.Body.Close()
-				if (err != nil && err != io.EOF) || msg.Operator == schema.OPERATOR_CONN_CLOSE {
-					c.deleteConn(msg.ConnId)
-					return //no bytes write to client notifiy the client close conn
-				}
-
-				w.Write([]byte("0")) //write a byte to client
 			}
 		}
 
@@ -84,19 +74,10 @@ func (c *Client) openConnHandler(msg *schema.OpenConnRequest, w http.ResponseWri
 				//w.Header().Set("Content-Type", "text/event-stream")
 				//w.Header().Set("Cache-Control", "no-cache")
 				//w.Header().Set("Connection", "keep-alive")
-				logger.Info("start to copy to target client")
+				logger.Info("[ROLE_WRITER] start to copy to target client")
 				common.Copy(w, conn.Conn, c.Compress, false, c.DownloadSpeedMonitor)
 				c.deleteConn(msg.ConnId)
-
-			} else if c.HttpVersion == schema.HTTP_VERSION_1_0 {
-				_, err := common.CopyOne(w, conn.Conn, c.Compress, false, c.DownloadSpeedMonitor)
-				if err != nil || msg.Operator == schema.OPERATOR_CONN_CLOSE {
-					c.deleteConn(msg.ConnId)
-				}
-				//if copyone copy 0 bytes, the client will close conn.
-				//one case is: copy some bytes but error occur. the client will close in the next request.
 			}
-
 		} else {
 			//empty content send to client to close conn
 		}

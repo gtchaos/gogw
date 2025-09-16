@@ -140,12 +140,12 @@ func (c *Client) register() error {
 
 	response, err := http.Post(url, "", r)
 	if err != nil {
-		return err
+		return fmt.Errorf("register request fail, %v", err)
 	}
 
 	msgPack, err = schema.ReadMsg(response.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("read response fail when register, %v", err)
 	}
 
 	msg, _ := msgPack.Msg.(*schema.RegisterResponse)
@@ -172,13 +172,13 @@ func (c *Client) msgRequestLoop() error {
 		response, err := http.Post(url, "", bytes.NewReader(data))
 		if err != nil {
 			logger.Error(err)
-			return err
+			return fmt.Errorf("msg request fail, %v", err)
 		}
 
 		msgPackResponse, err := schema.ReadMsg(response.Body)
 		if err != nil {
 			logger.Error(err)
-			return err
+			return fmt.Errorf("read response fail when loop msg, %v", err)
 		}
 
 		response.Body.Close()
@@ -223,45 +223,10 @@ func (c *Client) openConn(connId string, conn net.Conn) error {
 				w.Close()
 			}()
 
-			http.Post(url, "", r)
+			_, err := http.Post(url, "", r)
 
-		} else if c.HttpVersion == schema.HTTP_VERSION_1_0 {
-			var err error = nil
-			var n int = 0
-			data := make([]byte, common.PACKSIZE)
+			logger.Info("[role_reader] conn to server copy done, error: %v", err)
 
-			for err == nil {
-				n, err = conn.Read(data)
-				if n <= 0 && err != nil {
-					break
-				}
-
-				if n <= 0 {
-					continue
-				}
-
-				r, w := io.Pipe()
-				go func() {
-					schema.WriteMsg(w, readerMsgPack)
-					_, err = common.CopyAll(w, bytes.NewReader(data[:n]), c.Compress, false, nil)
-					w.Close()
-				}()
-
-				if resp, err2 := http.Post(url, "", r); err2 != nil {
-					err = err2
-
-				} else {
-					var respBs = make([]byte, 1)
-					var n int
-					n, err = resp.Body.Read(respBs)
-					//zero response means close conn
-					if n == 0 || (err != nil && err != io.EOF) {
-						break
-					}
-					err = nil
-					resp.Body.Close()
-				}
-			}
 		}
 	}()
 
@@ -289,31 +254,13 @@ func (c *Client) openConn(connId string, conn net.Conn) error {
 
 			response, err := http.Post(url, "", r)
 			if err != nil {
+				logger.Error("[role_writer] http post failed, %v", err)
 				return
 			}
 
 			common.Copy(conn, response.Body, false, c.Compress, nil)
+			logger.Info("[role_writer] server to conn copy done")
 			response.Body.Close()
-
-		} else if c.HttpVersion == schema.HTTP_VERSION_1_0 {
-			var err error = nil
-			var n int = 0
-			for err == nil || (err == io.EOF && n > 0) {
-				r, w := io.Pipe()
-				go func() {
-					schema.WriteMsg(w, writerMsgPack)
-					w.Close()
-				}()
-
-				var response *http.Response
-				response, err = http.Post(url, "", r)
-				if err != nil {
-					return
-				}
-
-				n, err = common.CopyAll(conn, response.Body, false, c.Compress, nil)
-				response.Body.Close()
-			}
 		}
 	}()
 
