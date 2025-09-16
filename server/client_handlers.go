@@ -69,12 +69,12 @@ func (c *Client) openConnHandler(msg *schema.OpenConnRequest, w http.ResponseWri
 	} else if msg.Role == schema.ROLE_WRITER {
 		if conni, ok := c.Conns.Load(msg.ConnId); ok {
 			conn, _ := conni.(*common.Conn)
-
+			logger.Info("[ROLE_WRITER] start to copy to target client")
 			if c.HttpVersion == schema.HTTP_VERSION_1_1 {
-				//w.Header().Set("Content-Type", "text/event-stream")
-				//w.Header().Set("Cache-Control", "no-cache")
-				//w.Header().Set("Connection", "keep-alive")
-				logger.Info("[ROLE_WRITER] start to copy to target client")
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Connection", "keep-alive")
+				logger.Info("[ROLE_WRITER] http1.1 start to copy to target client")
 				common.Copy(w, conn.Conn, c.Compress, false, c.DownloadSpeedMonitor)
 				c.deleteConn(msg.ConnId)
 			}
